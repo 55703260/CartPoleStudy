@@ -74,9 +74,10 @@ class DQN():
     # 更新网络的函数，输入为状态和Q值，计算损失并反向传播
     def update(self, state:np.ndarray, q:np.ndarray):
         # 预测Q值
-        q_pred = self.model(torch.Tensor(state))
+
+        q_pred = self.model(torch.Tensor(np.array(state)))
         # 计算预测Q值和实际Q值的均方误差损失
-        loss = self.criterion(q_pred, torch.Tensor(q))
+        loss = self.criterion(q_pred, torch.Tensor(np.array(q)))
         # 清零梯度
         self.optimizer.zero_grad()
         # 反向传播
@@ -90,6 +91,22 @@ class DQN():
         with torch.no_grad():
             # 返回预测的Q值
             return self.model(torch.Tensor(state))
+
+    def replay(self, memory, replay_size, gamma):
+        if len(memory) < replay_size:
+            return
+        batch = random.sample(memory, replay_size)
+        states = []
+        q_targets = []
+        for state, action, next_state, reward, done in batch:
+            states.append(state)
+            q_values = self.predict(state).tolist()
+
+            q_values[action] = (
+                    reward + (0 if done else gamma * torch.max(self.predict(next_state)).item())
+            )
+            q_targets.append(q_values)
+        self.update(states, q_targets)
 
 # 简单的DQN训练函数, 训练环境env，训练轮数episodes，衰减因子gamma为0.9，随机概率epsilon，衰减率epsilon_decay
 def dqn_simple(env, model, episodes, gamma=0.9, epsilon=0.3, epsilon_decay=0.9, title='dqn_simple'):
@@ -105,13 +122,14 @@ def dqn_simple(env, model, episodes, gamma=0.9, epsilon=0.3, epsilon_decay=0.9, 
         done = False
         # 当episode没有结束时
         while not done:
-            # epsilon-greedy策略，有epsilon的概率选择随机动作
+            # epsilon-greedy策略，有epsilon的概率选择随机动作,每一轮epsilon都会衰减，这样选新动作的概率就会越来越低
             if(random.random() < epsilon):
                 action = env.action_space.sample()
             else:
                 # 否则选择Q值最大的动作
                 q_values = model.predict(state)
                 action = torch.argmax(q_values).item()
+
             # 执行动作，获取下一状态，奖励和是否结束，并累加奖励
             next_state, reward, done, _ = env.step(action)
             total_reward += reward
@@ -133,6 +151,34 @@ def dqn_simple(env, model, episodes, gamma=0.9, epsilon=0.3, epsilon_decay=0.9, 
         # 绘制奖励曲线
         plot_result(rewards)
 
-simple_dqn = DQN(state_dim=4, action_dim=2, hidden_dim=64, lr=0.001)
-# 用simple_dqn模型训练环境env，训练轮数为2000，衰减因子gamma为0.9，epsilon初始值为0.5，epsilon衰减率为0.99
-dqn_simple(env=env, model=simple_dqn, episodes=150, gamma=0.9, epsilon=0.5, epsilon_decay=0.99)
+def dqn_replay(env, model, episodes, gamma=0.9, epsilon=0.3, epsilon_decay=0.9, replay_size=20,title='dqn_replay'):
+    rewards = []
+    memory = []
+    for _ in range(episodes):
+        state = env.reset()
+        total_reward = 0.
+        done = False
+        while not done:
+            if(random.random() < epsilon):
+                action = env.action_space.sample()
+            else:
+                q_values = model.predict(state)
+                action = torch.argmax(q_values).item()
+            next_state, reward, done, _ = env.step(action)
+            total_reward += reward
+            memory.append((state,action,next_state,reward,done))
+
+            # q_values = model.predict(state)
+
+            model.replay(memory, replay_size, gamma)
+
+            state = next_state
+
+        epsilon = max(epsilon * epsilon_decay, 0.01)
+        rewards.append(total_reward)
+        plot_result(rewards)
+
+dqn = DQN(state_dim=4, action_dim=2, hidden_dim=64, lr=0.001)
+# 用simple_dqn模型训练环境env，训练轮数为2000，衰减因子gamma为0.9，随机概率epsilon初始值为0.5，epsilon衰减率为0.99
+# dqn_simple(env=env, model=dqn, episodes=150, gamma=0.9, epsilon=0.5, epsilon_decay=0.99)
+dqn_replay(env=env, model=dqn, episodes=150, gamma=0.9, epsilon=0.5, epsilon_decay=0.99,title='dqn_replay')
