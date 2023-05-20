@@ -3,13 +3,17 @@ import gym  # OpenAI Gym库，用于创建和操作环境
 import numpy as np  # NumPy库，用于进行数值计算
 import matplotlib.pyplot as plt # Matplotlib的pyplot，用于绘图
 import torch as torch
+# print(torch.__version__)
+# print(torch.version.cuda)
 import os   # os库，用于处理操作系统相关的任务，如环境变量设置
 os.environ['SDL_VIDEODRIVER'] = 'dummy' # 设置环境变量，尝试在没有显示设备的情况下运行Gym环境
 from IPython.display import clear_output    # 用于清除输出
 
 env = gym.make('CartPole-v1')   # 创建环境
 env.reset() # 重置环境并获取初始屏幕渲染
-
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# print(device)
+# print(torch.cuda.is_available())
 # 定义一个函数，用于绘制结果
 def plot_result(values, title=''):
     clear_output(True)  # 清除当前输出
